@@ -20,7 +20,9 @@ rm devkitpro-pkgbuild-helpers-2.2.3-1-any.pkg.tar.xz
 rm switch-libfribidi-1.0.12-1-any.pkg.tar.xz
 rm python27-switch.tar.gz
 
-/bin/bash -c 'sed -i'"'"'.bak'"'"' '"'"'s/set(CMAKE_EXE_LINKER_FLAGS_INIT "/set(CMAKE_EXE_LINKER_FLAGS_INIT "-fPIC /'"'"' $DEVKITPRO/switch.cmake'
+# Install the ounce-devkit (Switch 2: libounce + OunceVK + switch2 toolchain)
+# into the existing devkitPro. This is the only Switch 2 specific setup step.
+curl -fsSL https://github.com/ouncebrew/ounce-devkit/releases/download/devkit-20261114/ounce-devkit-20261114.tar.xz | tar -xJ -C $DEVKITPRO
 
 
 curl -LOC - https://www.renpy.org/dl/$RENPY_VER/pygame_sdl2-$PYGAME_SDL2_VER-for-renpy-$RENPY_VER.tar.gz

@@ -46,18 +46,11 @@ tar -xf renpy-switch-modules.tar.gz -C $DEVKITPRO/portlibs/switch
 rm renpy-switch-modules.tar.gz
 rm -rf build-switch
 
-source /opt/devkitpro/switchvars.sh
-
-pushd switch
-rm -rf build
-mkdir build
-pushd build
-cmake ..
-make
-popd
-popd
-mv ./switch/build/renpy-switch.nso ./raw/switch/exefs/main
-rm -rf switch include source pygame_sdl2-source
+# The Switch 2 executable is NOT built here: renOunce builds one NRO per game
+# (each with the game's name, branding and save folder embedded) via
+# build-game.bash. This script only produces the engine:
+#   raw/switch/romfs/Contents/{renpy.py, lib.zip, renpy/common}
+# which build-game.bash uses as the romfs base for every game.
 
 
 rm -rf renpy_clear

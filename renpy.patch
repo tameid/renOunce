@@ -673,7 +673,7 @@ diff -Naur b/renpy/bootstrap.py a/renpy/bootstrap.py
                  if renpy.android:
                      renpy.config.logdir = os.environ['ANDROID_PUBLIC']
 +                elif renpy.switch:
-+                    renpy.config.logdir = "save:/Logs/"
++                    renpy.config.logdir = os.environ.get("RENOUNCE_HOME", "sdmc:/renOunce") + "/Logs/"
                  else:
                      renpy.config.logdir = basedir
  
@@ -1393,8 +1393,8 @@ diff -Naur b/renpy/loader.py a/renpy/loader.py
 -    fn = os.path.join(renpy.config.gamedir, fn)
 -    dn = os.path.dirname(fn)
 +    if fn.startswith("cache/") and renpy.switch:
-+        fn = "save://" + fn
-+        dn = "save://cache"
++        fn = os.environ.get("RENOUNCE_HOME", "sdmc:/renOunce") + "/" + fn
++        dn = os.environ.get("RENOUNCE_HOME", "sdmc:/renOunce") + "/cache"
 +    else:
 +        fn = os.path.join(renpy.config.gamedir, fn)
 +        dn = os.path.dirname(fn)
@@ -1440,7 +1440,7 @@ diff -Naur b/renpy/loader.py a/renpy/loader.py
              files = game_files # @UnusedVariable
  
 -        i = os.path.join(renpy.config.basedir, i)
-+        if not i.startswith("romfs:"):
++        if not (i.startswith("romfs:") or i.startswith("sdmc:")):
 +            i = os.path.join(renpy.config.basedir, i)
          for j in walkdir(i):
              add(i, j, files, seen)
@@ -1467,7 +1467,7 @@ diff -Naur b/renpy/loader.py a/renpy/loader.py
  
      for d in renpy.config.searchpath:
          fn = os.path.join(renpy.config.basedir, d, name)
-+        if d.startswith("romfs:"):
++        if d.startswith("romfs:") or d.startswith("sdmc:"):
 +            fn = os.path.join(d, name)
  
          add_auto(fn)
@@ -1569,7 +1569,7 @@ diff -Naur b/renpy/log.py a/renpy/log.py
 +                except Exception:
 +                    s = repr((s,) + args)
 +                s += "\n"
-+            with real_open("save://Logs/log.log", "a+") as f:
++            with real_open(os.environ.get("RENOUNCE_HOME", "sdmc:/renOunce") + "/Logs/log.log", "a+") as f:
 +                f.write(str(s))
 +            return
 +
@@ -1593,7 +1593,7 @@ diff -Naur b/renpy/main.py a/renpy/main.py
      game.basepath = renpy.config.gamedir
      renpy.config.searchpath = [ renpy.config.gamedir ]
 +    if renpy.switch:
-+        renpy.config.searchpath = [ renpy.config.gamedir, "save://" ]
++        renpy.config.searchpath = [ renpy.config.gamedir, os.environ.get("RENOUNCE_HOME", "sdmc:/renOunce") + "/" ]
  
      # Find the common directory.
      commondir = renpy.__main__.path_to_common(renpy.config.renpy_base) # E1101 @UndefinedVariable
@@ -1626,7 +1626,7 @@ diff -Naur b/renpy/persistent.py a/renpy/persistent.py
          files = [ os.path.expanduser("~/.renpy/persistent"),
                    os.path.expanduser("~/Library/RenPy/persistent") ]
 +    elif renpy.switch:
-+        files = ["save://MultiPersistent"]
++        files = [os.environ.get("RENOUNCE_HOME", "sdmc:/renOunce") + "/MultiPersistent"]
      else:
          files = [ os.path.expanduser("~/.renpy/persistent") ]
  
@@ -1736,7 +1736,7 @@ diff -Naur b/renpy/savelocation.py a/renpy/savelocation.py
          location.add(FileLocation(i))
  
 +    if renpy.switch:
-+        location = FileLocation("save:/Data/")
++        location = FileLocation(os.environ.get("RENOUNCE_HOME", "sdmc:/renOunce") + "/Data/")
 +
      # Scan the location once.
      location.scan()
@@ -1840,7 +1840,7 @@ diff -Naur b/renpy.py a/renpy.py
              return False
  
 +    if renpy.switch:
-+        return "save:/Data/"
++        return os.environ.get("RENOUNCE_HOME", "sdmc:/renOunce") + "/Data/"
 +
      # Android.
      if renpy.android:
@@ -1864,6 +1864,6 @@ diff -Naur b/renpy.py a/renpy.py
 +        main()
 +    except:
 +        if sys.platform == 'horizon':
-+            with open("save://otrh.log", "w") as f:
++            with open(os.environ.get("RENOUNCE_HOME", "sdmc:/renOunce") + "/otrh.log", "w") as f:
 +                import traceback
 +                f.write(traceback.format_exc())

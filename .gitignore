@@ -1,0 +1,17 @@
+# build.bash downloads/produces these in the workspace; never commit them
+/raw/
+/renpy-source/
+/pygame_sdl2-source/
+/renpy_sdk/
+/renpy_clear/
+/private/
+/private.mp3
+/build-switch/
+/build-*/
+/dist/
+raw.zip
+renpy-switch-modules.tar.gz
+*.pkg.tar.xz
+*.tar.gz
+*.tar.bz2
+*.zip

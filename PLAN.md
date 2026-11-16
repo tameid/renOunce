@@ -190,3 +190,45 @@ to the SD card by deleting the save-data code — the same pattern a shipping
 Switch 2 port uses in production.
 
 ---
+
+## 10. Implementation notes (deviations from §4/§5)
+
+Two requirements were added after the plan was written: **one NRO per game
+with the game's own name/branding**, and **one save folder per game**. That
+produced three changes to the plan's minimal change set:
+
+1. **`RENOUNCE_HOME` instead of five static strings (§5).** A static
+   `sdmc:/renOunce/` in the patch would share one save folder across every
+   game. Instead, `main.c` computes
+   `sdmc:/renOunce/<RENOUNCE_GAME_ID>/` from a compile-time define
+   (`-DRENOUNCE_GAME_ID=…`, fed by `SWITCH_GAME_ID` in
+   `switch/CMakeLists.txt`), creates the folder tree with `mkdir()`, and
+   exports it as the `RENOUNCE_HOME` environment variable before Python
+   starts. Every `save:` site in `renpy.patch` became
+   `os.environ.get("RENOUNCE_HOME", "sdmc:/renOunce") + "/…"`.
+2. **All 9 `save:` sites, not 5.** The plan's table missed two that also
+   break once the `save:` device is gone: `log.py`'s
+   `real_open("save://Logs/log.log")` (unwrapped — it would crash the first
+   log write) and `renpy.py`'s traceback hook `open("save://otrh.log")`.
+   Both now use `RENOUNCE_HOME`. The two `romfs:`-only searchpath guards in
+   `loader.py` also accept `sdmc:` entries, which makes the `main.py`
+   searchpath entry functional instead of the silent no-op it was
+   upstream (`os.path.join(basedir, "save://", name)`).
+3. **No NRO in `build.bash`.** §4 moved the `.nso` → `.nro` rename inside
+   `build.bash`, but a generic engine-only NRO would embed the romfs
+   *before* `build.bash` populates it (the executable build used to run
+   earlier in the script), and per-game branding must be baked at link time
+   anyway. `build.bash` now stops at the engine template (`raw/` +
+   `raw.zip`), and `build-game.bash` does the per-game cmake/NRO build.
+
+Also worth knowing:
+
+- `nx_create_nro`'s `ICON` argument is optional; without it the NRO gets
+  libounce's `default_icon.jpg` (found via `NX_DEFAULT_ICON` in
+  `Switch2.cmake`).
+- The `save:` device never exists on renOunce, so `_otrhlibnx.commitsave()`
+  is a no-op that only keeps the patch's call sites valid.
+- Both CMake projects' `cmake_minimum_required` moved to 3.13 to match
+  `Switch2.cmake`'s own requirement.
+- `main.c`'s error strings no longer mention NSPs.
+

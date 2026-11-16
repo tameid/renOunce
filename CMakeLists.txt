@@ -1,9 +1,9 @@
-cmake_minimum_required(VERSION 3.0.2)
+cmake_minimum_required(VERSION 3.13)
 
 if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
     if(DEFINED ENV{DEVKITPRO})
         set(DEVKITPRO $ENV{DEVKITPRO})
-        set(CMAKE_TOOLCHAIN_FILE "$ENV{DEVKITPRO}/switch.cmake" CACHE PATH "toolchain file")
+        set(CMAKE_TOOLCHAIN_FILE "$ENV{DEVKITPRO}/libounce/cmake/Switch2.cmake" CACHE PATH "toolchain file")
     else()
         message(FATAL_ERROR "Please define DEVKITPRO to point to your SDK path!")
     endif()

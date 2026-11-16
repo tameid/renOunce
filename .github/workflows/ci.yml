@@ -1,5 +1,5 @@
-name: GitHub Actions Demo
-run-name: ${{ github.actor }} is testing out GitHub Actions 🚀
+name: renOunce CI
+run-name: ${{ github.actor }} is building renOunce 🚀
 on: [push]
 
 jobs:
@@ -11,20 +11,32 @@ jobs:
         steps:
         - name: Check for dockerenv file
           run: echo $DEVKITPRO
-            
+
+        - name: install Switch 2 devkit
+          run: curl -fsSL https://github.com/ouncebrew/ounce-devkit/releases/download/devkit-20261114/ounce-devkit-20261114.tar.xz | sudo tar -xJ -C $DEVKITPRO
+
         - name: checkout repository
           uses: actions/checkout@master
           with:
             submodules: recursive
-            
+
         - name: setup environment
           run: sudo bash setup.bash
-        
-        - name: build
+
+        - name: build engine
           run: sudo bash build.bash
 
-        - name: upload raw
+        - name: build demo game NRO
+          run: sudo bash build-game.bash examples/minimal-game --out dist
+
+        - name: upload raw template
           uses: actions/upload-artifact@master
           with:
             name: raw
             path: raw.zip
+
+        - name: upload demo NRO
+          uses: actions/upload-artifact@master
+          with:
+            name: nro
+            path: dist/*.nro

@@ -1,44 +1,24 @@
 #include <switch.h>
 #include <Python.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
 
-u64 cur_progid = 0;
-AccountUid userID={0};
+// Every game gets its own folder under sdmc:/renOunce/ for saves, logs,
+// cache and persistent data. The folder id is baked in at build time
+// (SWITCH_GAME_ID in switch/CMakeLists.txt) and handed to the Ren'Py
+// python layer through the RENOUNCE_HOME environment variable, which
+// renpy.patch reads everywhere Ren2Switch used to read the save: device.
+#ifndef RENOUNCE_GAME_ID
+#define RENOUNCE_GAME_ID "game"
+#endif
 
 static PyObject* commitsave(PyObject* self, PyObject* args)
 {
-    u64 total_size = 0;
-    u64 free_size = 0;
-    FsFileSystem* FsSave = fsdevGetDeviceFileSystem("save");
-
-    FsSaveDataInfoReader reader;
-    FsSaveDataInfo info;
-    s64 total_entries=0;
-    Result rc=0;
-    
-    fsdevCommitDevice("save");
-    fsFsGetTotalSpace(FsSave, "/", &total_size);
-    fsFsGetFreeSpace(FsSave, "/", &free_size);
-    if (free_size < 0x800000) {
-        u64 new_size = total_size + 0x800000;
-
-        fsdevUnmountDevice("save");
-        fsOpenSaveDataInfoReader(&reader, FsSaveDataSpaceId_User);
-
-        while(1) {
-            rc = fsSaveDataInfoReaderRead(&reader, &info, 1, &total_entries);
-            if (R_FAILED(rc) || total_entries==0) break;
-
-            if (info.save_data_type == FsSaveDataType_Account && userID.uid[0] == info.uid.uid[0] && userID.uid[1] == info.uid.uid[1] && info.application_id == cur_progid) {
-                fsExtendSaveDataFileSystem(info.save_data_space_id, info.save_data_id, new_size, 0x400000);
-                break;
-            }
-        }
-
-        fsSaveDataInfoReaderClose(&reader);
-        fsdevMountSaveData("save", cur_progid, userID);
-
-    }
+    // Saves live on the SD card now, so there is no save: device to commit.
+    // The function stays because renpy.patch's bootstrap.py/savelocation.py
+    // hooks still call it.
     return Py_None;
 }
 
@@ -167,79 +147,34 @@ void __libnx_initheap(void)
 }
 
 
-Result createSaveData()
+// Create the per-game folder tree on the SD card and export it to Python.
+// mkdir() on an existing directory just fails with EEXIST, which is ignored.
+static void prepare_renounce_home(void)
 {
-    NsApplicationControlData g_applicationControlData;
-    size_t dummy;
+    char path[512];
+    const char* home = "sdmc:/renOunce/" RENOUNCE_GAME_ID;
 
-    nsGetApplicationControlData(0x1, cur_progid, &g_applicationControlData, sizeof(g_applicationControlData), &dummy);
+    mkdir("sdmc:/renOunce", 0777);
+    mkdir(home, 0777);
+    snprintf(path, sizeof(path), "%s/Data", home);
+    mkdir(path, 0777);
+    snprintf(path, sizeof(path), "%s/Logs", home);
+    mkdir(path, 0777);
+    snprintf(path, sizeof(path), "%s/cache", home);
+    mkdir(path, 0777);
 
-    FsSaveDataAttribute attr;
-    memset(&attr, 0, sizeof(FsSaveDataAttribute));
-    attr.application_id = cur_progid;
-    attr.uid = userID;
-    attr.system_save_data_id = 0;
-    attr.save_data_type = FsSaveDataType_Account;
-    attr.save_data_rank = 0;
-    attr.save_data_index = 0;
-
-    FsSaveDataCreationInfo crt;
-    memset(&crt, 0, sizeof(FsSaveDataCreationInfo));
-            
-    crt.save_data_size = 0x800000;
-    crt.journal_size = 0x400000;
-    crt.available_size = 0x8000;
-    crt.owner_id = g_applicationControlData.nacp.save_data_owner_id;
-    crt.flags = 0;
-    crt.save_data_space_id = FsSaveDataSpaceId_User;
-
-    FsSaveDataMetaInfo meta={};
-
-    return fsCreateSaveDataFileSystem(&attr, &crt, &meta);
+    setenv("RENOUNCE_HOME", home, 1);
 }
 
 void userAppInit()
 {
-
-    // fsdevUnmountAll();
-
-    Result rc=0;
-    PselUserSelectionSettings settings;
-    
-    rc = svcGetInfo(&cur_progid, InfoType_ProgramId, CUR_PROCESS_HANDLE, 0);
-    rc = accountInitialize(AccountServiceType_Application);
-    rc = accountGetPreselectedUser(&userID);
-    if (R_FAILED(rc)) {
-        s32 count;
-
-        accountGetUserCount(&count);
-
-        if (count > 1) {
-            pselShowUserSelector(&userID, &settings);
-        } else {
-            size_t loadedUsers;
-            AccountUid account_ids[count];
-            accountListAllUsers(account_ids, count, &loadedUsers);
-            userID = account_ids[0];
-        }
-    }
-
-    if (accountUidIsValid(&userID)) {
-        rc = fsdevMountSaveData("save", cur_progid, userID);
-        if (R_FAILED(rc)) {
-            rc = createSaveData();
-            rc = fsdevMountSaveData("save", cur_progid, userID);
-        }
-    }
-
     romfsInit();
     socketInitializeDefault();
+    prepare_renounce_home();
 }
 
 void userAppExit()
 {
-    fsdevCommitDevice("save");
-    fsdevUnmountDevice("save");
     socketExit();
     romfsExit();
 }
@@ -277,7 +212,6 @@ static void on_applet_hook(AppletHookType hook, void *param)
    switch (hook)
    {
       case AppletHookType_OnExitRequest:
-        fsdevCommitDevice("save");
         svcSleepThread(1500000000ULL);
         appletUnlockExit();
         break;
@@ -379,12 +313,12 @@ int main(int argc, char* argv[])
 
     if (sysconfigdata_file == NULL)
     {
-        show_error_and_exit("Could not find lib.zip.\n\nPlease ensure that you have extracted the files correctly so that the \"lib.zip\" file is in the same directory as the nsp file.");
+        show_error_and_exit("Could not find lib.zip.\n\nPlease ensure that the romfs was built correctly: the \"lib.zip\" file must be at romfs:/Contents/lib.zip, next to the .nro.");
     }
 
     if (renpy_file == NULL)
     {
-        show_error_and_exit("Could not find renpy.py.\n\nPlease ensure that you have extracted the files correctly so that the \"renpy.py\" file is in the same directory as the nsp file.");
+        show_error_and_exit("Could not find renpy.py.\n\nPlease ensure that the romfs was built correctly: the \"renpy.py\" file must be at romfs:/Contents/renpy.py, next to the .nro.");
     }
 
     fclose(sysconfigdata_file);
@@ -412,7 +346,7 @@ int main(int argc, char* argv[])
     { \
         if (PyRun_SimpleString("import " lib) == -1) \
         { \
-            show_error_and_exit("Could not import python library " lib ".\n\nPlease ensure that you have extracted the files correctly so that the \"lib\" folder is in the same directory as the nsp file, and that the \"lib\" folder contains the folder \"python2.7\". \nInside that folder, the file \"" lib ".py\" or folder \"" lib "\" needs to exist."); \
+            show_error_and_exit("Could not import python library " lib ".\n\nPlease ensure that the romfs was built correctly: \"lib.zip\" must contain the folder \"python2.7\". \nInside that folder, the file \"" lib ".py\" or folder \"" lib "\" needs to exist."); \
         } \
     }
 
@@ -426,7 +360,7 @@ int main(int argc, char* argv[])
 
     if (python_result == -1)
     {
-        show_error_and_exit("An uncaught Python exception occurred during renpy.py execution.\n\nPlease look in the save:// folder for more information about this exception.");
+        show_error_and_exit("An uncaught Python exception occurred during renpy.py execution.\n\nPlease look in the sdmc:/renOunce/" RENOUNCE_GAME_ID "/ folder for more information about this exception.");
     }
 
     Py_Exit(0);
