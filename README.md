@@ -54,6 +54,11 @@ podman exec -w /work renounce-dev bash build-switch2-runtime.bash
 # 2. Interactive build: reads config.name, config.version and window icon.
 ./build-interactive.py /path/to/your-game
 
+# A final Ren'Py release (directory or ZIP) can also be imported as a new
+# project under projects/<ID>/, then built if its bytecode is compatible.
+./build-interactive.py /path/to/final-release.zip
+./build-interactive.py --import-only /path/to/final-release
+
 # Or build directly inside the container:
 podman exec -w /work renounce-dev bash build-game.bash /work/my-game \
     --name "My Game" --author "You" --version "1.2" \
@@ -63,6 +68,12 @@ podman exec -w /work renounce-dev bash build-game.bash /work/my-game \
 # detects config.window_icon (or common icon filenames), and converts the
 # image to a 256x256 JPEG. Press Enter to accept each default, or enter -
 # at the icon prompt to use the libounce icon.
+
+The importer copies the release's `game/` assets and archives, preserves the
+detected icon and metadata in `projects/<ID>/`, and omits caches and saves.
+The project can be reopened with `./build-interactive.py projects/<ID>`.
+Compiled releases need a compatible Ren'Py runtime: the current port runs
+Ren'Py 7.6.1/Python 2.7 and rejects Ren'Py 8.x bytecode before building.
 ```
 
 Output: `dist/<id>.nro`. Copy it to the Switch 2's SD card (e.g.

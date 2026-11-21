@@ -11,6 +11,8 @@
 /build-switch/
 /build-*/
 /dist/
+/projects/
+/game/
 raw.zip
 renpy-switch-modules.tar.gz
 *.pkg.tar.xz

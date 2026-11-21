@@ -59,6 +59,24 @@ if [ -z "$GAME_DIR" ] || [ ! -d "$GAME_DIR/game" ]; then
 fi
 GAME_DIR=$(realpath "$GAME_DIR")
 
+# A compiled release cannot be recompiled with a different Ren'Py bytecode
+# format. Fail before staging gigabytes of assets or linking an unusable NRO.
+if [ -f "$GAME_DIR/game/script_version.txt" ]; then
+    python3 - "$GAME_DIR/game/script_version.txt" <<'PY'
+import ast
+import sys
+try:
+    version = ast.literal_eval(open(sys.argv[1]).read().strip())
+except (SyntaxError, ValueError):
+    sys.exit('build-game.bash: invalid game/script_version.txt')
+if not isinstance(version, (tuple, list)) or len(version) < 2:
+    sys.exit('build-game.bash: invalid Ren\'Py version')
+if version[0] != 7 or tuple(version[:2]) > (7, 6):
+    sys.exit('build-game.bash: compiled game uses Ren\'Py %s; this runtime is Ren\'Py 7.6.1' %
+             '.'.join(map(str, version)))
+PY
+fi
+
 REPO=$(realpath "$(dirname "$0")")
 
 if [ ! -f "$REPO/raw/switch/romfs/Contents/lib.zip" ] || [ ! -f "$REPO/switch/CMakeLists.txt" ]; then
