@@ -34,6 +34,10 @@ See [PLAN.md](PLAN.md) for the full port analysis and change list.
 - **One branded NRO per game**: title, author, version and icon go into the
   nacp shown on the Switch 2 home menu; the NRO file itself is named after
   the game.
+- **Joy-Con 2 mouse mode**: libounce's `PadPointer` sends movement, clicks
+  and scrolling to Ren'Py. The on-screen cursor appears after the optical
+  sensor tracks movement, and polling runs at 16 ms. Verified on Switch 2
+  hardware with The Question.
 
 ## Building
 

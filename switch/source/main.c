@@ -27,6 +27,47 @@ static int nxlink_connected = 0;
 static char boot_home[512] = "sdmc:/renOunce/" RENOUNCE_GAME_ID;
 static char boot_log_path[600] = "sdmc:/renOunce-" RENOUNCE_GAME_ID "-boot.log";
 
+static PadState mouse_pad;
+static PadPointer mouse_pointer;
+static int mouse_pointer_ready = 0;
+static u64 mouse_last_sample = 0;
+
+static PyObject* polljoyconmouse(PyObject* self, PyObject* args)
+{
+    int width, height;
+    if (!PyArg_ParseTuple(args, "ii", &width, &height))
+        return NULL;
+
+    if (!mouse_pointer_ready) {
+        if (width <= 0 || height <= 0 ||
+            R_FAILED(padPointerInitialize(&mouse_pointer, width, height)))
+            return Py_BuildValue("(iiiiiii)", 0, 0, 0, 0, 0, 0, 0);
+        padInitializeDefault(&mouse_pad);
+        mouse_pointer_ready = 1;
+    }
+
+    int tracking = 0;
+    padUpdate(&mouse_pad);
+    padPointerUpdate(&mouse_pointer, &mouse_pad);
+    if (mouse_pointer.active) {
+        HidNmouseState state;
+        size_t count = 0;
+        if (R_SUCCEEDED(hidGetNmouseStates(mouse_pointer.current, &state, 1, &count)) &&
+            count != 0 && state.sampling_number != mouse_last_sample) {
+            mouse_last_sample = state.sampling_number;
+            tracking = (state.flags & BIT(1)) != 0;
+        }
+    } else {
+        mouse_last_sample = 0;
+    }
+
+    return Py_BuildValue("(iiiiiii)", mouse_pointer.active,
+                         mouse_pointer.x, mouse_pointer.y,
+                         mouse_pointer.buttons_cur,
+                         mouse_pointer.wheel_delta_y, tracking,
+                         mouse_pointer.delta_x != 0 || mouse_pointer.delta_y != 0);
+}
+
 static void boot_log(const char* fmt, ...)
 {
     va_list ap;
@@ -76,6 +117,7 @@ static PyObject* restartprogram(PyObject* self, PyObject* args)
 }
 
 static PyMethodDef myMethods[] = {
+    { "polljoyconmouse", polljoyconmouse, METH_VARARGS, "Read the Switch 2 Joy-Con pointer" },
     { "commitsave", commitsave, METH_NOARGS, "commitsave" },
     { "startboost", startboost, METH_NOARGS, "startboost" },
     { "disableboost", disableboost, METH_NOARGS, "disableboost" },

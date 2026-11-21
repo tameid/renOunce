@@ -124,10 +124,21 @@ echo "    save folder: sdmc:/renOunce/$GAME_ID/"
 
 # Stage the per-game romfs: engine base + this game's files.
 WORK="$REPO/build-$GAME_ID"
+if [ "$GAME_DIR" = "$WORK" ] || [[ "$GAME_DIR" == "$WORK/"* ]]; then
+    echo "build-game.bash: game source must be outside $WORK" >&2
+    exit 1
+fi
 rm -rf "$WORK"
 mkdir -p "$WORK/romfs/Contents/game"
 cp -r "$REPO/raw/switch/romfs/." "$WORK/romfs/"
 cp -r "$GAME_DIR/game/." "$WORK/romfs/Contents/game/"
+
+# Keep the pointer in the game framebuffer: the Switch SDL video backend does
+# not provide a desktop window manager cursor.
+cp "$REPO/switch/assets/renounce-cursor.png" \
+    "$WORK/romfs/Contents/game/_renounce_cursor.png"
+cp "$REPO/switch/assets/renounce-cursor.rpy" \
+    "$WORK/romfs/Contents/game/_renounce_cursor.rpy"
 
 # Older engine templates did not embed the SDK fonts. The Question and other
 # Ren'Py examples reference SourceHanSansLite.ttf by its bare filename.

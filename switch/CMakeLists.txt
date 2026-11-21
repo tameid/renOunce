@@ -181,6 +181,18 @@ target_link_libraries(${PROJECT_NAME}
 )
 
 target_include_directories(${PROJECT_NAME} PUBLIC ${INCLUDES})
+# Switch 1 pkg-config metadata exports libnx headers. They must not shadow
+# libounce's Switch 2 pad.h, which provides the Joy-Con mouse pointer API.
+foreach(_pkg EGL FREETYPE2 GLAPI GLESV2 LIBAVCODEC LIBAVFILTER
+        LIBAVFORMAT LIBAVUTIL LIBDRM_NOUVEAU LIBSWRESAMPLE LIBSWSCALE
+        SDL2 SDL2_GFX SDL2_IMAGE SDL2_MIXER SDL2_TTF ZLIB)
+    get_target_property(_pkg_includes PkgConfig::${_pkg} INTERFACE_INCLUDE_DIRECTORIES)
+    if(_pkg_includes)
+        list(REMOVE_ITEM _pkg_includes "${DEVKITPRO}/libnx/include")
+        set_target_properties(PkgConfig::${_pkg} PROPERTIES
+            INTERFACE_INCLUDE_DIRECTORIES "${_pkg_includes}")
+    endif()
+endforeach()
 target_compile_definitions(${PROJECT_NAME} PRIVATE RENOUNCE_GAME_ID="${SWITCH_GAME_ID}")
 if(RENOUNCE_PROBE_SDL)
     target_compile_definitions(${PROJECT_NAME} PRIVATE RENOUNCE_PROBE_SDL=1)
