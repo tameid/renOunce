@@ -13,7 +13,7 @@ define demo.pages = [
     "This NRO was built by renOunce.",
     "If you can read this on the Switch 2, the whole pipeline worked.",
     "Saves, logs and cache for this game live in",
-    "sdmc:/renOunce/renOunceDemo/",
+    "sdmc:/renOunce/renOunce_Demo/",
     "Restarting, to prove appletRestartProgram works from an NRO...",
     ]
 

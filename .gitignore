@@ -1,4 +1,6 @@
 # build.bash downloads/produces these in the workspace; never commit them
+/include/
+/source/
 /raw/
 /renpy-source/
 /pygame_sdl2-source/
@@ -15,3 +17,11 @@ renpy-switch-modules.tar.gz
 *.tar.gz
 *.tar.bz2
 *.zip
+
+# local build container (not tracked by git)
+/container/
+__pycache__/
+*.pyc
+
+# local hardware/debug probes (not tracked)
+/.debug/

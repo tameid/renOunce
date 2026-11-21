@@ -59,10 +59,17 @@ cp ./renpy_sdk/*/renpy.sh ./renpy_clear/renpy.sh
 cp -r ./renpy_sdk/*/lib ./renpy_clear/lib
 mkdir ./renpy_clear/game
 cp -r ./renpy-source/renpy ./renpy_clear/renpy
+# Ren'Py's example games reference fonts shipped separately in sdk-fonts.
+# Put them in common so the runtime asset search can resolve them by name.
+if [ -d ./renpy-source/sdk-fonts ]; then
+    cp -r ./renpy-source/sdk-fonts/. ./renpy_clear/renpy/common/
+fi
 cp ./renpy-source/renpy.py ./renpy_clear/renpy.py
 mv ./script.rpy ./renpy_clear/game/script.rpy
 cp ./renpy_sdk/*/*.exe ./renpy_clear/
-rm -rf renpy-source renpy_sdk ./renpy_clear/lib/*mac*
+# Keep renpy-source for build-switch2-runtime.bash, which cross-compiles its
+# Cython modules after the engine template is assembled.
+rm -rf renpy_sdk ./renpy_clear/lib/*mac*
 
 pushd renpy_clear
 ./renpy.sh --compile . compile
@@ -88,8 +95,28 @@ cp -r ./renpy_clear/renpy/common ./raw/switch/romfs/Contents/renpy/
 cp -r ./renpy_clear/renpy/common ./raw/android/assets/renpy/
 mv private.mp3 ./raw/android/assets
 cp ./renpy_clear/renpy.py ./raw/switch/romfs/Contents/
+if [ ! -f ./raw/lib.zip ]; then
+    echo "=== raw/lib.zip missing; building from devkit python2.7 stdlib ==="
+    mkdir -p ./raw
+    (cd "$DEVKITPRO/portlibs/switch/lib" && 7z a -tzip "$OLDPWD/raw/lib.zip" python2.7) >/dev/null
+fi
 unzip -qq ./raw/lib.zip -d ./raw/lib/
 rm ./raw/lib.zip
+mkdir -p ./raw/lib/python2.7/pygame_sdl2/threads
+cp ./pygame_sdl2-source/src/pygame_sdl2/*.py ./raw/lib/python2.7/pygame_sdl2/
+cp ./pygame_sdl2-source/src/pygame_sdl2/threads/*.py ./raw/lib/python2.7/pygame_sdl2/threads/
+# The devkit stdlib is intentionally small. Ren'Py's SDK supplies additional
+# pure-Python dependencies which its engine imports at runtime.
+for package in builtins future past ecdsa requests certifi chardet idna urllib3 pyasn1 rsa copyreg html http ordlookup reprlib socketserver winreg; do
+    if [ -d "./renpy_clear/lib/python2.7/$package" ]; then
+        cp -r "./renpy_clear/lib/python2.7/$package" ./raw/lib/python2.7/
+    fi
+done
+for module in six.pyo typing.pyo pefile.pyo list2cmdline.pyo; do
+    if [ -f "./renpy_clear/lib/python2.7/$module" ]; then
+        cp "./renpy_clear/lib/python2.7/$module" ./raw/lib/python2.7/
+    fi
+done
 cp -r ./renpy_clear/renpy/ ./raw/lib/renpy/
 rm -rf ./raw/lib/renpy/common/
 7z a -tzip ./raw/switch/romfs/Contents/lib.zip ./raw/lib/*

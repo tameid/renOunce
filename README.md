@@ -41,32 +41,51 @@ The pipeline targets the same kind of container as Ren2Switch did
 (`devkitpro/devkita64:20221113` — Ubuntu-based, has apt + python2.7). CI
 builds everything on every push.
 
-Locally, you need an environment where `setup.bash`'s apt step works — a
-devkitPro container, WSL, or a plain Ubuntu box. (A flatpak sandbox is *not*
-enough: no python2.7, no cmake, and `/opt` is read-only; do source work
-there and let CI build.)
+Use the `renounce-dev` Podman container for the toolchain. On the host,
+`build-interactive.py` needs Python 3, Podman and ImageMagick (for automatic
+icon conversion). Set `RENONCE_CONTAINER` if your container has another name.
 
 ```sh
-# 1. Engine + toolchain (once, ~long): installs the ounce-devkit, fetches
-#    Ren'Py/pygame_sdl2 sources, patches them, builds librenpy-switch-modules.a
-#    and the engine template under raw/.
-sudo bash setup.bash
-sudo bash build.bash
+# 1. Prepare the engine once inside the container:
+podman exec -w /work renounce-dev bash setup.bash
+podman exec -w /work renounce-dev bash build.bash
+podman exec -w /work renounce-dev bash build-switch2-runtime.bash
 
-# 2. One NRO per game:
-sudo bash build-game.bash /path/to/your-game            # defaults below
-sudo bash build-game.bash /path/to/your-game \
+# 2. Interactive build: reads config.name, config.version and window icon.
+./build-interactive.py /path/to/your-game
+
+# Or build directly inside the container:
+podman exec -w /work renounce-dev bash build-game.bash /work/my-game \
     --name "My Game" --author "You" --version "1.2" \
     --id MyGame --icon icon.jpg --out dist
 
-#    --name/--version default to config.name/config.version in the game's
-#    game/options.rpy; --id defaults to the sanitized name; --icon is a
-#    256x256 JPEG for the home menu (empty = libounce default icon).
+# The interactive script copies the game's game/ folder into the container,
+# detects config.window_icon (or common icon filenames), and converts the
+# image to a 256x256 JPEG. Press Enter to accept each default, or enter -
+# at the icon prompt to use the libounce icon.
 ```
 
 Output: `dist/<id>.nro`. Copy it to the Switch 2's SD card (e.g.
 `sdmc:/switch/renOunce/<id>.nro`) and launch from hbmenu while holding R, as
 usual for kaiHEN homebrew.
+
+### Source-built Python and Ren'Py
+
+After `setup.bash`, the Switch 2 runtime can be rebuilt from CPython 2.7.18
+and the Ren'Py/pygame_sdl2 Cython sources:
+
+```sh
+./container/run.sh bash build-switch2-runtime.bash
+./container/run.sh env \
+    RENONCE_PYTHON_ARCHIVE=/work/build-python27/source-build/libpython2.7-switch2.a \
+    RENONCE_RENPY_ARCHIVE=/work/build-python27/renpy-modules/librenpy-switch-modules.a \
+    bash build-game.bash examples/minimal-game --id renOunce_PythonBuilt
+```
+
+The build compiles CPython's C objects and the Ren'Py extension archive with
+the Switch 2 toolchain, then links them with libounce. It uses the installed
+Switch Python `pyconfig.h` and stdlib files as configuration inputs. The
+source-built runtime has launched The Question on Switch 2 hardware.
 
 `build.bash` also still uploads the classic `raw.zip` template (PC/Android/
 Switch scaffolding) for anyone packaging other targets.
@@ -78,6 +97,8 @@ Switch scaffolding) for anyone packaging other targets.
 | `setup.bash` | container setup: apt deps, Switch-1 portlib extras, ounce-devkit |
 | `build.bash` | engine build: cython → `librenpy-switch-modules.a` → `raw/` template |
 | `build-game.bash` | per-game NRO build (branding + romfs + save folder) |
+| `build-interactive.py` | interactive game configuration and automatic icon conversion |
+| `build-switch2-runtime.bash` | cross-compile CPython and Ren'Py modules |
 | `CMakeLists.txt` | builds `librenpy-switch-modules.a` (Switch 2 toolchain) |
 | `switch/` | the NRO itself: `main.c` boots Python 2.7 and runs `romfs:/Contents/renpy.py` |
 | `renpy.patch` | Ren'Py 7.6.1 patch: `renpy.switch` platform, GLES renderer, romfs loader, `RENOUNCE_HOME` paths |
@@ -86,5 +107,5 @@ Switch scaffolding) for anyone packaging other targets.
 
 ## Status
 
-Validation ladder in [PLAN.md](PLAN.md) §7 — M0 (toolchain sanity) is what
-CI checks; M1+ need real Switch 2 hardware.
+The Question reached its menu on Switch 2 hardware. The SDK font package is
+included for its translated menus; other game fonts should live in `game/`.

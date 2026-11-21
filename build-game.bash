@@ -111,18 +111,71 @@ mkdir -p "$WORK/romfs/Contents/game"
 cp -r "$REPO/raw/switch/romfs/." "$WORK/romfs/"
 cp -r "$GAME_DIR/game/." "$WORK/romfs/Contents/game/"
 
+# Older engine templates did not embed the SDK fonts. The Question and other
+# Ren'Py examples reference SourceHanSansLite.ttf by its bare filename.
+if [ ! -f "$WORK/romfs/Contents/renpy/common/SourceHanSansLite.ttf" ]; then
+    SDK_FONTS="$REPO/renpy-source/sdk-fonts"
+    if [ -d "$SDK_FONTS" ]; then
+        cp -r "$SDK_FONTS/." "$WORK/romfs/Contents/renpy/common/"
+    fi
+fi
+
+# Older engine templates omit pygame_sdl2's pure-Python package. Its compiled
+# extensions are linked into the NRO, but Python still needs __init__.py and
+# the helpers in lib.zip to import the package.
+if ! unzip -Z1 "$WORK/romfs/Contents/lib.zip" | grep -qx 'python2.7/pygame_sdl2/__init__.py'; then
+    PYGAME_PY="$REPO/pygame_sdl2-source/src/pygame_sdl2"
+    if [ ! -f "$PYGAME_PY/__init__.py" ]; then
+        echo "build-game.bash: pygame_sdl2 Python sources missing; run setup.bash first" >&2
+        exit 1
+    fi
+    mkdir -p "$WORK/libzip/python2.7/pygame_sdl2/threads"
+    cp "$PYGAME_PY"/*.py "$WORK/libzip/python2.7/pygame_sdl2/"
+    cp "$PYGAME_PY"/threads/*.py "$WORK/libzip/python2.7/pygame_sdl2/threads/"
+    (cd "$WORK/libzip" && 7z a -tzip "$WORK/romfs/Contents/lib.zip" python2.7/pygame_sdl2) >/dev/null
+fi
+
+# Existing engine templates may lack SDK Python-only dependencies. Overlay all
+# platform-neutral packages rather than waiting for one import to fail at boot.
+SDK_PY="$REPO/raw/renpy_clear/lib/python2.7"
+if [ ! -f "$SDK_PY/builtins/__init__.pyo" ]; then
+    echo "build-game.bash: Ren'Py SDK Python dependencies missing; run build.bash first" >&2
+    exit 1
+fi
+mkdir -p "$WORK/libzip/python2.7"
+for package in builtins future past ecdsa requests certifi chardet idna urllib3 pyasn1 rsa copyreg html http ordlookup reprlib socketserver winreg; do
+    if [ -d "$SDK_PY/$package" ]; then
+        cp -r "$SDK_PY/$package" "$WORK/libzip/python2.7/"
+    fi
+done
+for module in six.pyo typing.pyo pefile.pyo list2cmdline.pyo; do
+    if [ -f "$SDK_PY/$module" ]; then
+        cp "$SDK_PY/$module" "$WORK/libzip/python2.7/"
+    fi
+done
+(cd "$WORK/libzip" && 7z a -tzip "$WORK/romfs/Contents/lib.zip" python2.7) >/dev/null
+
 # The NRO embeds the romfs at link time, so reconfigure per game.
 source "$DEVKITPRO/switch2vars.sh"
+
+PYTHON_ARCHIVE_DEFAULT="$REPO/build-python27/source-build/libpython2.7-switch2.a"
+RENPY_ARCHIVE_DEFAULT="$REPO/build-python27/renpy-modules/librenpy-switch-modules.a"
+[ -f "$PYTHON_ARCHIVE_DEFAULT" ] || PYTHON_ARCHIVE_DEFAULT="$DEVKITPRO/portlibs/switch/lib/libpython2.7.a"
+[ -f "$RENPY_ARCHIVE_DEFAULT" ] || RENPY_ARCHIVE_DEFAULT="$DEVKITPRO/portlibs/switch/lib/librenpy-switch-modules.a"
+CMAKE_ICON_ARGS=()
+[ -z "$ICON" ] || CMAKE_ICON_ARGS=(-DSWITCH_ICON="$ICON")
 
 rm -rf "$WORK/build"
 cmake -S "$REPO/switch" -B "$WORK/build" \
     -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+    -DRENONCE_PYTHON_ARCHIVE="${RENONCE_PYTHON_ARCHIVE:-$PYTHON_ARCHIVE_DEFAULT}" \
+    -DRENONCE_RENPY_ARCHIVE="${RENONCE_RENPY_ARCHIVE:-$RENPY_ARCHIVE_DEFAULT}" \
     -DSWITCH_APP_NAME="$NAME" \
     -DSWITCH_AUTHOR="$AUTHOR" \
     -DSWITCH_VERSION="$VERSION" \
     -DSWITCH_GAME_ID="$GAME_ID" \
     -DSWITCH_ROMFS="$WORK/romfs" \
-    ${ICON:+-DSWITCH_ICON="$ICON"}
+    "${CMAKE_ICON_ARGS[@]}"
 cmake --build "$WORK/build"
 
 mkdir -p "$OUT"

@@ -11,6 +11,10 @@ endif()
 
 project(renpy-switch-modules)
 
+set(RENONCE_PYTHON_ARCHIVE
+    "${DEVKITPRO}/portlibs/switch/lib/libpython2.7.a"
+    CACHE FILEPATH "Static CPython archive for this build")
+
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE RelWithDebInfo)
 endif()
@@ -143,7 +147,7 @@ endif()
 add_library(${PROJECT_NAME} STATIC ${SOURCES})
 
 target_link_libraries(${PROJECT_NAME}
-    ${DEVKITPRO}/portlibs/switch/lib/libpython2.7.a
+    ${RENONCE_PYTHON_ARCHIVE}
     ${DEVKITPRO}/portlibs/switch/lib/libfribidi.a
     m
     PkgConfig::EGL

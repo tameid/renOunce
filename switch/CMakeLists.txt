@@ -11,6 +11,13 @@ endif()
 
 project(renpy-switch)
 
+set(RENONCE_PYTHON_ARCHIVE
+    "${DEVKITPRO}/portlibs/switch/lib/libpython2.7.a"
+    CACHE FILEPATH "Static CPython archive for this build")
+set(RENONCE_RENPY_ARCHIVE
+    "${DEVKITPRO}/portlibs/switch/lib/librenpy-switch-modules.a"
+    CACHE FILEPATH "Static Ren'Py extension archive for this build")
+
 # Per-game branding. build-game.bash overrides all of these per game; the
 # defaults build a generic engine-only NRO.
 #
@@ -40,6 +47,7 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 set(C_FLAGS
+    -I${DEVKITPRO}/libounce/include
     -DFRIBIDI_ENTRY=
     -DHAVE_CONFIG_H=1
 )
@@ -49,12 +57,21 @@ set(OPTIMIZATION_FLAGS
 )
 
 set(INCLUDES
+    ${DEVKITPRO}/libounce/include
     ${DEVKITPRO}/portlibs/switch/include/python2.7
 )
 
 set(SOURCES
     source/main.c
+    source/selectmodule.c
 )
+
+option(RENOUNCE_PYTHON_PROBE "Build the Python startup probe" OFF)
+option(RENOUNCE_PROBE_SDL "Link SDL extension modules into the Python probe" OFF)
+option(RENOUNCE_PROBE_SDL_CORE "Link SDL core into the Python probe" OFF)
+if(RENOUNCE_PYTHON_PROBE)
+    set(SOURCES source/python_probe.c)
+endif()
 
 set(CMAKE_PREFIX_PATH "${DEVKITPRO}/portlibs/switch")
 set(ENV{PKG_CONFIG_PATH} "${DEVKITPRO}/portlibs/switch/lib/pkgconfig")
@@ -64,6 +81,14 @@ find_package(PkgConfig REQUIRED)
 set(pkgcfg_lib_FREETYPE2_nx ${DEVKITPRO}/libounce/lib/libnx.a)
 set(pkgcfg_lib_LIBAVFILTER_nx ${DEVKITPRO}/libounce/lib/libnx.a)
 set(pkgcfg_lib_LIBAVFORMAT_nx ${DEVKITPRO}/libounce/lib/libnx.a)
+# Switch 1 SDL pkg-config files still resolve "-lnx" to libnx/lib/libnx.a.
+# Mixing that archive with libounce's libnx.a can select incompatible runtime
+# objects before main() or userAppInit() is reached.
+set(pkgcfg_lib_SDL2_nx ${DEVKITPRO}/libounce/lib/libnx.a)
+set(pkgcfg_lib_SDL2_GFX_nx ${DEVKITPRO}/libounce/lib/libnx.a)
+set(pkgcfg_lib_SDL2_IMAGE_nx ${DEVKITPRO}/libounce/lib/libnx.a)
+set(pkgcfg_lib_SDL2_MIXER_nx ${DEVKITPRO}/libounce/lib/libnx.a)
+set(pkgcfg_lib_SDL2_TTF_nx ${DEVKITPRO}/libounce/lib/libnx.a)
 set(pkgcfg_lib_EGL_m /opt/devkitpro/devkitA64/aarch64-none-elf/lib/pic/libm.a)
 set(pkgcfg_lib_FREETYPE2_m /opt/devkitpro/devkitA64/aarch64-none-elf/lib/pic/libm.a)
 set(pkgcfg_lib_GLAPI_m /opt/devkitpro/devkitA64/aarch64-none-elf/lib/pic/libm.a)
@@ -133,8 +158,8 @@ endif()
 add_executable(${PROJECT_NAME} ${SOURCES})
 
 target_link_libraries(${PROJECT_NAME}
-    ${DEVKITPRO}/portlibs/switch/lib/libpython2.7.a
-    ${DEVKITPRO}/portlibs/switch/lib/librenpy-switch-modules.a
+    ${RENONCE_PYTHON_ARCHIVE}
+    ${RENONCE_RENPY_ARCHIVE}
     m
     PkgConfig::EGL
     PkgConfig::FREETYPE2
@@ -157,6 +182,16 @@ target_link_libraries(${PROJECT_NAME}
 
 target_include_directories(${PROJECT_NAME} PUBLIC ${INCLUDES})
 target_compile_definitions(${PROJECT_NAME} PRIVATE RENOUNCE_GAME_ID="${SWITCH_GAME_ID}")
+if(RENOUNCE_PROBE_SDL)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE RENOUNCE_PROBE_SDL=1)
+endif()
+if(RENOUNCE_PROBE_SDL_CORE)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE RENOUNCE_PROBE_SDL_CORE=1)
+endif()
+if(RENOUNCE_PYTHON_PROBE)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE
+        RENOUNCE_PROBE_LOG="sdmc:/renOunce/${SWITCH_GAME_ID}.log")
+endif()
 target_compile_options(${PROJECT_NAME} PUBLIC $<$<COMPILE_LANGUAGE:C>:${C_FLAGS}>)
 target_compile_options(${PROJECT_NAME} PUBLIC $<$<CONFIG:RELEASE>:${OPTIMIZATION_FLAGS}>)
 target_compile_options(${PROJECT_NAME} PUBLIC $<$<CONFIG:RELWITHDEBINFO>:${OPTIMIZATION_FLAGS}>)
