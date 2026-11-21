@@ -1,9 +1,13 @@
 #include <switch.h>
 #include <Python.h>
+#include <errno.h>
+#include <netinet/in.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 // Every game gets its own folder under sdmc:/renOunce/ for saves, logs,
 // cache and persistent data. The folder id is baked in at build time
@@ -14,12 +18,43 @@
 #define RENOUNCE_GAME_ID "game"
 #endif
 
+// Boot diagnostics. Every stage between userAppInit() and the first frame
+// Ren'Py draws is logged to sdmc:/renOunce/<id>/boot.log, so a black screen
+// on hardware can be told apart from a failure inside Ren'Py itself (which
+// writes Logs/log.txt and Logs/traceback.txt instead).
+static FILE* boot_log_file = NULL;
+static int nxlink_connected = 0;
+static char boot_home[512] = "sdmc:/renOunce/" RENOUNCE_GAME_ID;
+static char boot_log_path[600] = "sdmc:/renOunce-" RENOUNCE_GAME_ID "-boot.log";
+
+static void boot_log(const char* fmt, ...)
+{
+    va_list ap;
+
+    if (boot_log_file == NULL)
+        return;
+
+    va_start(ap, fmt);
+    vfprintf(boot_log_file, fmt, ap);
+    va_end(ap);
+    fputc('\n', boot_log_file);
+    fflush(boot_log_file);
+
+    if (nxlink_connected) {
+        va_start(ap, fmt);
+        vfprintf(stderr, fmt, ap);
+        va_end(ap);
+        fputc('\n', stderr);
+        fflush(stderr);
+    }
+}
+
 static PyObject* commitsave(PyObject* self, PyObject* args)
 {
     // Saves live on the SD card now, so there is no save: device to commit.
     // The function stays because renpy.patch's bootstrap.py/savelocation.py
     // hooks still call it.
-    return Py_None;
+    Py_RETURN_NONE;
 }
 
 static PyObject* startboost(PyObject* self, PyObject* args)
@@ -59,11 +94,14 @@ PyMODINIT_FUNC initpygame_sdl2_display();
 PyMODINIT_FUNC initpygame_sdl2_draw();
 PyMODINIT_FUNC initpygame_sdl2_error();
 PyMODINIT_FUNC initpygame_sdl2_event();
+PyMODINIT_FUNC initpygame_sdl2_font();
 PyMODINIT_FUNC initpygame_sdl2_gfxdraw();
 PyMODINIT_FUNC initpygame_sdl2_image();
 PyMODINIT_FUNC initpygame_sdl2_joystick();
 PyMODINIT_FUNC initpygame_sdl2_key();
 PyMODINIT_FUNC initpygame_sdl2_locals();
+PyMODINIT_FUNC initpygame_sdl2_mixer();
+PyMODINIT_FUNC initpygame_sdl2_mixer_music();
 PyMODINIT_FUNC initpygame_sdl2_mouse();
 PyMODINIT_FUNC initpygame_sdl2_power();
 PyMODINIT_FUNC initpygame_sdl2_pygame_time();
@@ -118,33 +156,16 @@ PyMODINIT_FUNC initrenpy_uguu_uguu();
 
 PyMODINIT_FUNC initrenpy_lexersupport();
 PyMODINIT_FUNC initrenpy_display_quaternion();
+PyMODINIT_FUNC initselect(void);
 
-// Overide the heap initialization function.
-void __libnx_initheap(void)
-{
-    void* addr = NULL;
-    u64 size = 0;
-    u64 mem_available = 0, mem_used = 0;
-
-    svcGetInfo(&mem_available, InfoType_TotalMemorySize, CUR_PROCESS_HANDLE, 0);
-    svcGetInfo(&mem_used, InfoType_UsedMemorySize, CUR_PROCESS_HANDLE, 0);
-
-    if (mem_available > mem_used+0x200000)
-        size = (mem_available - mem_used - 0x200000) & ~0x1FFFFF;
-    if (size == 0)
-        size = 0x2000000*16;
-
-    Result rc = svcSetHeapSize(&addr, size);
-
-    if (R_FAILED(rc) || addr==NULL)
-        diagAbortWithResult(MAKERESULT(Module_Libnx, LibnxError_HeapAllocFailed));
-
-    extern char* fake_heap_start;
-    extern char* fake_heap_end;
-
-    fake_heap_start = (char*)addr;
-    fake_heap_end   = (char*)addr + size;
-}
+// The Ren2Switch heap override is gone: it predates libounce, which already
+// sets the newlib/mimalloc heap to every byte the applet will give us and
+// calls _mallocInitialize() right after. Keeping the override meant replacing
+// libounce's initialization path with a hand copy of it, before the SD card
+// (and therefore any log) exists. Probe NRO on hardware confirmed libounce's
+// own path works, so use it.
+static Result userapp_romfs_rc = 1;
+static Result userapp_socket_rc = 1;
 
 
 // Create the per-game folder tree on the SD card and export it to Python.
@@ -153,24 +174,64 @@ static void prepare_renounce_home(void)
 {
     char path[512];
     const char* home = "sdmc:/renOunce/" RENOUNCE_GAME_ID;
+    int rc_root, rc_home, rc_data, rc_logs, rc_cache;
 
-    mkdir("sdmc:/renOunce", 0777);
-    mkdir(home, 0777);
+    rc_root = mkdir("sdmc:/renOunce", 0777);
+    rc_home = mkdir(home, 0777);
+
+    snprintf(path, sizeof(path), "%s/boot.log", home);
+    boot_log_file = fopen(path, "w");
+
+    if (boot_log_file == NULL)
+    {
+        // The per-game folder may not be writable yet; keep a copy at the SD
+        // card root so a black screen still leaves evidence behind.
+        boot_log_file = fopen(boot_log_path, "w");
+        if (boot_log_file != NULL)
+            boot_log("renOunce boot log (fallback path) for %s", home);
+    }
+
+    if (boot_log_file != NULL) {
+        boot_log("renOunce boot log for %s", home);
+        boot_log("mkdir sdmc:/renOunce: %d (errno %d)", rc_root, errno);
+        boot_log("mkdir %s: %d (errno %d)", home, rc_home, errno);
+    }
+
     snprintf(path, sizeof(path), "%s/Data", home);
-    mkdir(path, 0777);
+    rc_data = mkdir(path, 0777);
     snprintf(path, sizeof(path), "%s/Logs", home);
-    mkdir(path, 0777);
+    rc_logs = mkdir(path, 0777);
     snprintf(path, sizeof(path), "%s/cache", home);
-    mkdir(path, 0777);
+    rc_cache = mkdir(path, 0777);
+
+    boot_log("mkdir Data/Logs/cache: %d %d %d (errno %d)",
+             rc_data, rc_logs, rc_cache, errno);
 
     setenv("RENOUNCE_HOME", home, 1);
+    strncpy(boot_home, home, sizeof(boot_home) - 1);
+    boot_log("RENOUNCE_HOME=%s", home);
 }
 
 void userAppInit()
 {
-    romfsInit();
-    socketInitializeDefault();
+    Result rc_romfs, rc_socket;
+    u64 mem_available = 0, mem_used = 0;
+
     prepare_renounce_home();
+
+    svcGetInfo(&mem_available, InfoType_TotalMemorySize, CUR_PROCESS_HANDLE, 0);
+    svcGetInfo(&mem_used, InfoType_UsedMemorySize, CUR_PROCESS_HANDLE, 0);
+    boot_log("heap: available=%llu used=%llu (libounce default heap)",
+             (unsigned long long) mem_available,
+             (unsigned long long) mem_used);
+
+    rc_romfs = romfsInit();
+    userapp_romfs_rc = rc_romfs;
+    boot_log("romfsInit(): 0x%08x", rc_romfs);
+
+    rc_socket = socketInitializeDefault();
+    userapp_socket_rc = rc_socket;
+    boot_log("socketInitializeDefault(): 0x%08x", rc_socket);
 }
 
 void userAppExit()
@@ -190,7 +251,13 @@ char python_error_buffer[0x400];
 
 void show_error_and_exit(const char* message)
 {
-    Py_Finalize();
+    boot_log("FATAL: %s", message);
+    if (boot_log_file != NULL)
+        fflush(boot_log_file);
+
+    if (Py_IsInitialized())
+        Py_Finalize();
+
     char* first_line = (char*)message;
     char* end = strchr(message, '\n');
     if (end != NULL)
@@ -203,6 +270,47 @@ void show_error_and_exit(const char* message)
     errorSystemCreate(&c, (const char*)first_line, message);
     errorSystemShow(&c);
     Py_Exit(1);
+}
+
+// Send Python's stdout/stderr (including uncaught tracebacks) to a file, so
+// the boot log survives a console that never gets a working display.
+static void redirect_python_stdio(void)
+{
+    char code[2048];
+
+    snprintf(code, sizeof(code),
+        "import sys\n"
+        "class _RenounceLog(object):\n"
+        "    def __init__(self, path, orig):\n"
+        "        self.fd = open(path, 'w')\n"
+        "        self.orig = orig\n"
+        "    def write(self, s):\n"
+        "        try:\n"
+        "            self.fd.write(s)\n"
+        "            self.fd.flush()\n"
+        "        except Exception:\n"
+        "            pass\n"
+        "        try:\n"
+        "            self.orig.write(s)\n"
+        "            self.orig.flush()\n"
+        "        except Exception:\n"
+        "            pass\n"
+        "    def flush(self):\n"
+        "        for f in (self.fd, self.orig):\n"
+        "            try:\n"
+        "                f.flush()\n"
+        "            except Exception:\n"
+        "                pass\n"
+        "    def isatty(self):\n"
+        "        return False\n"
+        "_renounce_out = sys.stdout\n"
+        "_renounce_err = sys.stderr\n"
+        "sys.stdout = _RenounceLog('%s/Logs/stdout.log', _renounce_out)\n"
+        "sys.stderr = _RenounceLog('%s/Logs/stderr.log', _renounce_err)\n",
+        boot_home, boot_home);
+
+    if (PyRun_SimpleString(code) == -1)
+        boot_log("could not redirect Python stdio");
 }
 
 
@@ -227,8 +335,22 @@ int main(int argc, char* argv[])
 {
     setenv("MESA_NO_ERROR", "1", 1);
 
-    appletLockExit();
-    appletHook(&applet_hook_cookie, on_applet_hook, NULL);
+    // DIAGNOSTIC: appletLockExit() is deliberately not called while boot
+    // failures are being chased. It defers HOME/exit, so any hang here leaves
+    // the console unable to return to hbmenu without a reboot.
+    // appletLockExit();
+    // appletHook(&applet_hook_cookie, on_applet_hook, NULL);
+
+    boot_log("main(): entered (romfs=0x%08x socket=0x%08x)",
+             userapp_romfs_rc, userapp_socket_rc);
+
+    // nxlinkSetup fills __nxlink_host only for a netloader launch. Keep the
+    // normal hbmenu path free of network connection attempts.
+    if (__nxlink_host.s_addr != 0) {
+        int nxlink_fd = nxlinkStdio();
+        nxlink_connected = nxlink_fd >= 0;
+        boot_log("nxlinkStdio(): %d", nxlink_fd);
+    }
 
     Py_NoSiteFlag = 1;
     Py_IgnoreEnvironmentFlag = 1;
@@ -239,6 +361,7 @@ int main(int argc, char* argv[])
     static struct _inittab builtins[] = {
 
         {"_otrhlibnx", init_otrh_libnx},
+        {"select", initselect},
 
         {"pygame_sdl2.color", initpygame_sdl2_color},
         {"pygame_sdl2.controller", initpygame_sdl2_controller},
@@ -246,11 +369,14 @@ int main(int argc, char* argv[])
         {"pygame_sdl2.draw", initpygame_sdl2_draw},
         {"pygame_sdl2.error", initpygame_sdl2_error},
         {"pygame_sdl2.event", initpygame_sdl2_event},
+        {"pygame_sdl2.font", initpygame_sdl2_font},
         {"pygame_sdl2.gfxdraw", initpygame_sdl2_gfxdraw},
         {"pygame_sdl2.image", initpygame_sdl2_image},
         {"pygame_sdl2.joystick", initpygame_sdl2_joystick},
         {"pygame_sdl2.key", initpygame_sdl2_key},
         {"pygame_sdl2.locals", initpygame_sdl2_locals},
+        {"pygame_sdl2.mixer", initpygame_sdl2_mixer},
+        {"pygame_sdl2.mixer_music", initpygame_sdl2_mixer_music},
         {"pygame_sdl2.mouse", initpygame_sdl2_mouse},
         {"pygame_sdl2.power", initpygame_sdl2_power},
         {"pygame_sdl2.pygame_time", initpygame_sdl2_pygame_time},
@@ -310,6 +436,26 @@ int main(int argc, char* argv[])
 
     FILE* sysconfigdata_file = fopen("romfs:/Contents/lib.zip", "rb");
     FILE* renpy_file = fopen("romfs:/Contents/renpy.py", "rb");
+    FILE* game_file = fopen("romfs:/Contents/game/script.rpy", "rb");
+    FILE* game_file_c = fopen("romfs:/Contents/game/script.rpyc", "rb");
+
+    boot_log("romfs checks: lib.zip=%p renpy.py=%p game/script.rpy=%p script.rpyc=%p",
+             (void*) sysconfigdata_file, (void*) renpy_file,
+             (void*) game_file, (void*) game_file_c);
+
+    if (sysconfigdata_file != NULL)
+    {
+        long sz;
+        fseek(sysconfigdata_file, 0, SEEK_END);
+        sz = ftell(sysconfigdata_file);
+        fseek(sysconfigdata_file, 0, SEEK_SET);
+        boot_log("lib.zip size: %ld", sz);
+    }
+
+    if (game_file != NULL)
+        fclose(game_file);
+    if (game_file_c != NULL)
+        fclose(game_file_c);
 
     if (sysconfigdata_file == NULL)
     {
@@ -322,9 +468,25 @@ int main(int argc, char* argv[])
     }
 
     fclose(sysconfigdata_file);
+
+    // Set Python's home before initialization, then replace sys.path below.
+    static char python_home[] = "romfs:/Contents/lib.zip";
+    Py_SetPythonHome(python_home);
+
+    // CPython reads the built-in module table during initialization.
+    int inittab_result = PyImport_ExtendInittab(builtins);
+    boot_log("PyImport_ExtendInittab(): %d", inittab_result);
+    boot_log("Py_InitializeEx(): starting");
     Py_InitializeEx(0);
-    Py_SetPythonHome("romfs:/Contents/lib.zip");
-    PyImport_ExtendInittab(builtins);
+    boot_log("Py_InitializeEx(): done, initialized=%d", Py_IsInitialized());
+
+    if (PyErr_Occurred())
+    {
+        boot_log("Py_InitializeEx left an exception pending");
+        PyErr_Print();
+    }
+
+    redirect_python_stdio();
 
     char* pyargs[] = {
         "romfs:/Contents/renpy.py",
@@ -335,7 +497,14 @@ int main(int argc, char* argv[])
 
     int python_result;
 
-    python_result = PyRun_SimpleString("import sys\nsys.path = ['romfs:/Contents/lib.zip']");
+    // The archive has two roots: Python's stdlib is under python2.7/ while
+    // Ren'Py lives at the archive root. zipimport accepts a subdirectory
+    // after the .zip filename as a separate sys.path entry.
+    python_result = PyRun_SimpleString(
+        "import sys\n"
+        "sys.path = ['romfs:/Contents/lib.zip/python2.7', "
+        "'romfs:/Contents/lib.zip']");
+    boot_log("set sys.path: %d", python_result);
 
     if (python_result == -1)
     {
@@ -346,21 +515,33 @@ int main(int argc, char* argv[])
     { \
         if (PyRun_SimpleString("import " lib) == -1) \
         { \
+            boot_log("import " lib " failed"); \
+            PyErr_Print(); \
             show_error_and_exit("Could not import python library " lib ".\n\nPlease ensure that the romfs was built correctly: \"lib.zip\" must contain the folder \"python2.7\". \nInside that folder, the file \"" lib ".py\" or folder \"" lib "\" needs to exist."); \
+        } \
+        else \
+        { \
+            boot_log("import " lib ": ok"); \
         } \
     }
 
     x("os");
     x("pygame_sdl2");
     x("encodings");
+    x("select");
+    x("subprocess");
+    x("builtins");
 
 #undef x
 
+    boot_log("running romfs:/Contents/renpy.py");
     python_result = PyRun_SimpleFileEx(renpy_file, "romfs:/Contents/renpy.py", 1);
+    boot_log("renpy.py returned: %d", python_result);
 
     if (python_result == -1)
     {
-        show_error_and_exit("An uncaught Python exception occurred during renpy.py execution.\n\nPlease look in the sdmc:/renOunce/" RENOUNCE_GAME_ID "/ folder for more information about this exception.");
+        PyErr_Print();
+        show_error_and_exit("An uncaught Python exception occurred during renpy.py execution.\n\nPlease look in the sdmc:/renOunce/" RENOUNCE_GAME_ID "/Logs/ folder for more information about this exception.");
     }
 
     Py_Exit(0);

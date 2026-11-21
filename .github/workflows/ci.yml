@@ -26,8 +26,11 @@ jobs:
         - name: build engine
           run: sudo bash build.bash
 
+        - name: build Switch 2 Python and Ren'Py runtime
+          run: sudo bash build-switch2-runtime.bash
+
         - name: build demo game NRO
-          run: sudo bash build-game.bash examples/minimal-game --out dist
+          run: sudo env RENONCE_PYTHON_ARCHIVE="$GITHUB_WORKSPACE/build-python27/source-build/libpython2.7-switch2.a" RENONCE_RENPY_ARCHIVE="$GITHUB_WORKSPACE/build-python27/renpy-modules/librenpy-switch-modules.a" bash build-game.bash examples/minimal-game --out dist
 
         - name: upload raw template
           uses: actions/upload-artifact@master
