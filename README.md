@@ -6,6 +6,19 @@ Switch 1 / libnx) to [ouncebrew/ounce-devkit](https://github.com/ouncebrew/ounce
 (libounce + OunceVK, Switch 2 / libnx-compatible), with minimal changes.
 See [PLAN.md](PLAN.md) for the full port analysis and change list.
 
+## Ren'Py 8.4.1 engine
+
+The game-free Ren'Py 8.4.1/Python 3.12 Switch 2 NRO is built with
+`package-renpy84-release.bash` after staging the official SDK and compiling
+the runtime and extensions. It is written to
+`build-renpy8/8.4.1/renounce-renpy-8.4.1.nro`, with a `.sha256` file.
+Writable data lives in `renounce/renpy-8.4.1-engine/` beside the NRO.
+See [release notes](releases/renpy-8.4.1.md) for the packaged contents and
+current external-game integration scope.
+
+Ren'Py 8.6.1 remains a separate pending target. The legacy CI builds 7.6.1;
+it does not publish GitHub releases for incomplete targets.
+
 ## What's different from Ren2Switch
 
 - **Switch 2 toolchain everywhere**: `libounce/cmake/Switch2.cmake`,
@@ -124,3 +137,31 @@ Switch scaffolding) for anyone packaging other targets.
 
 The Question reached its menu on Switch 2 hardware. The SDK font package is
 included for its translated menus; other game fonts should live in `game/`.
+
+## Versioned engine targets (work in progress)
+
+Targets are declared independently in `targets/<Ren'Py version>/target.env`.
+`bash build-engine.bash 7.6.1` creates `dist/7.6.1/renounce-renpy-7.6.1.nro`
+from the existing Python 2.7 runtime, without embedding `Contents/game`.
+Its game directory is `sdmc:/renOunce/game/`, which a separate preparation
+application must populate. This external installation path has not yet been
+validated on hardware.
+
+Ren'Py 8.4.1 uses its own Python 3.12 runtime and
+`package-renpy84-release.bash`; `build-engine.bash` is the legacy 7.6.1
+builder and rejects 8.x. Ren'Py 8.6.1 still needs its own completed port.
+CI currently builds 7.6.1 only and does not publish releases.
+The existing per-game builder remains a legacy path for Ren'Py 7.6.1.
+
+### Python 3 port probe
+
+`build-python3-runtime.bash` now builds a separate CPython 3.11.9 static
+archive in the existing `renounce-dev` container. The standalone
+`switch/python3` target links a Python 3 NRO and embeds its own stdlib ZIP.
+See [switch/python3/README.md](switch/python3/README.md) for the Python 3
+build history and the Ren'Py 8.4.1 packaging instructions.
+
+### Ren'Py 8 extension work
+
+See [RENPY8-PORT.md](RENPY8-PORT.md) for the official SDK inputs,
+Python 3.12 build, compiled extension archives, and remaining integration.

@@ -478,8 +478,11 @@ int main(int argc, char* argv[])
 
     FILE* sysconfigdata_file = fopen("romfs:/Contents/lib.zip", "rb");
     FILE* renpy_file = fopen("romfs:/Contents/renpy.py", "rb");
-    FILE* game_file = fopen("romfs:/Contents/game/script.rpy", "rb");
-    FILE* game_file_c = fopen("romfs:/Contents/game/script.rpyc", "rb");
+    // Games are installed separately by the companion preparation tool.
+    const char* game_dir = "sdmc:/renOunce/game";
+    setenv("RENOUNCE_GAME_DIR", game_dir, 1);
+    FILE* game_file = fopen("sdmc:/renOunce/game/script.rpy", "rb");
+    FILE* game_file_c = fopen("sdmc:/renOunce/game/script.rpyc", "rb");
 
     boot_log("romfs checks: lib.zip=%p renpy.py=%p game/script.rpy=%p script.rpyc=%p",
              (void*) sysconfigdata_file, (void*) renpy_file,

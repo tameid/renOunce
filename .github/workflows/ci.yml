@@ -1,45 +1,40 @@
-name: renOunce CI
-run-name: ${{ github.actor }} is building renOunce 🚀
-on: [push]
+name: Build Ren'Py engines
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
-    build-artifact:
-        name: Build
-        runs-on: ubuntu-latest
-        container: devkitpro/devkita64:20221113
-
-        steps:
-        - name: Check for dockerenv file
-          run: echo $DEVKITPRO
-
-        - name: install Switch 2 devkit
-          run: curl -fsSL https://github.com/ouncebrew/ounce-devkit/releases/download/devkit-20261114/ounce-devkit-20261114.tar.xz | sudo tar -xJ -C $DEVKITPRO
-
-        - name: checkout repository
-          uses: actions/checkout@master
-          with:
-            submodules: recursive
-
-        - name: setup environment
-          run: sudo bash setup.bash
-
-        - name: build engine
-          run: sudo bash build.bash
-
-        - name: build Switch 2 Python and Ren'Py runtime
-          run: sudo bash build-switch2-runtime.bash
-
-        - name: build demo game NRO
-          run: sudo env RENONCE_PYTHON_ARCHIVE="$GITHUB_WORKSPACE/build-python27/source-build/libpython2.7-switch2.a" RENONCE_RENPY_ARCHIVE="$GITHUB_WORKSPACE/build-python27/renpy-modules/librenpy-switch-modules.a" bash build-game.bash examples/minimal-game --out dist
-
-        - name: upload raw template
-          uses: actions/upload-artifact@master
-          with:
-            name: raw
-            path: raw.zip
-
-        - name: upload demo NRO
-          uses: actions/upload-artifact@master
-          with:
-            name: nro
-            path: dist/*.nro
+  engine:
+    strategy:
+      fail-fast: false
+      matrix:
+        renpy: ['7.6.1']
+    runs-on: ubuntu-latest
+    container: devkitpro/devkita64:20221113
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check target support
+        run: |
+          . "targets/${{ matrix.renpy }}/target.env"
+          if [ "$STATUS" != buildable ]; then
+            echo "Ren'Py $RENPY_VERSION requires a Python $PYTHON_MAJOR port; refusing to publish a mismatched engine" >&2
+            exit 1
+          fi
+      - name: Install Switch 2 devkit
+        run: curl -fsSL https://github.com/ouncebrew/ounce-devkit/releases/download/devkit-20261114/ounce-devkit-20261114.tar.xz | tar -xJ -C /opt/devkitpro
+      - name: Prepare dependencies
+        run: bash setup.bash
+      - name: Build engine libraries
+        run: bash build.bash && bash build-switch2-runtime.bash
+      - name: Build engine-only NRO
+        run: bash build-engine.bash '${{ matrix.renpy }}'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: renpy-${{ matrix.renpy }}
+          path: dist/${{ matrix.renpy }}/*.nro
+          if-no-files-found: error

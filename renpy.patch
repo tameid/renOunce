@@ -1820,7 +1820,7 @@ diff -Naur b/renpy.py a/renpy.py
      """
  
 +    if sys.platform == 'horizon':
-+        return "romfs:/Contents/game"
++        return os.environ.get("RENOUNCE_GAME_DIR", "sdmc:/renOunce/game")
 +
      # A list of candidate game directory names.
      candidates = [ name ]
