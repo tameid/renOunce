@@ -27,3 +27,5 @@ __pycache__/
 /.debug/
 
 /PLAN.md
+/game/
+/projects/
