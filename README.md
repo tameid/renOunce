@@ -4,7 +4,7 @@ Ren'Py 7.6.1 games on **Nintendo Switch 2** homebrew — a port of
 [Otorhin/Ren2Switch](https://github.com/Otorhin/Ren2Switch) (Ren'Py on
 Switch 1 / libnx) to [ouncebrew/ounce-devkit](https://github.com/ouncebrew/ounce-devkit)
 (libounce + OunceVK, Switch 2 / libnx-compatible), with minimal changes.
-See [PLAN.md](PLAN.md) for the full port analysis and change list.
+
 
 ## What's different from Ren2Switch
 

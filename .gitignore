@@ -25,3 +25,5 @@ __pycache__/
 
 # local hardware/debug probes (not tracked)
 /.debug/
+
+/PLAN.md
