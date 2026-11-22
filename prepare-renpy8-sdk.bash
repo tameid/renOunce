@@ -2,8 +2,8 @@
 # Fetch and verify the complete official SDK and sources for each Ren'Py 8 target.
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")" && pwd)
-VERSION=${1:?Usage: prepare-renpy8-sdk.bash 8.4.1|8.6.1}
-case "$VERSION" in 8.4.1|8.6.1) ;; *) exit 2 ;; esac
+VERSION=${1:?Usage: prepare-renpy8-sdk.bash 8.4.1}
+case "$VERSION" in 8.4.1) ;; *) exit 2 ;; esac
 WORK="$ROOT/build-renpy8/$VERSION"
 mkdir -p "$WORK"
 BASE="https://www.renpy.org/dl/$VERSION"
@@ -22,10 +22,6 @@ case "$VERSION" in
     if [ ! -d "$WORK/pygame_sdl2-2.1.0+renpy8.4.1" ]; then
         tar -xzf "$WORK/pygame.tar.gz" -C "$WORK"
     fi
-    ;;
-  8.6.1)
-    fetch "renpy-8.6.1-source.tar.bz2" source.tar.bz2 e270e5ad607cb7d75611621086fa32acb6b7c4785c98b192921e26ff42c6fa38
-    fetch "renpy-8.6.1-sdk.tar.bz2" sdk.tar.bz2 4d76d88f690ff7d600218dad3941dfddb88e2104e107367a0600a17364335509
     ;;
 esac
 if [ ! -d "$WORK/renpy-$VERSION-source" ]; then

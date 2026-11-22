@@ -4,7 +4,6 @@ Ren'Py 7.6.1 games on **Nintendo Switch 2** homebrew — a port of
 [Otorhin/Ren2Switch](https://github.com/Otorhin/Ren2Switch) (Ren'Py on
 Switch 1 / libnx) to [ouncebrew/ounce-devkit](https://github.com/ouncebrew/ounce-devkit)
 (libounce + OunceVK, Switch 2 / libnx-compatible), with minimal changes.
-See [PLAN.md](PLAN.md) for the full port analysis and change list.
 
 ## Ren'Py 8.4.1 engine
 
@@ -16,8 +15,7 @@ Writable data lives in `renounce/renpy-8.4.1-engine/` beside the NRO.
 See [release notes](releases/renpy-8.4.1.md) for the packaged contents and
 current external-game integration scope.
 
-Ren'Py 8.6.1 remains a separate pending target. The legacy CI builds 7.6.1;
-it does not publish GitHub releases for incomplete targets.
+Releases are built from version branches when their target is ready.
 
 ## What's different from Ren2Switch
 

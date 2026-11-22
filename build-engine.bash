@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "$0")" && pwd)
 VERSION=${1:?Usage: build-engine.bash VERSION}
 case "$VERSION" in
-    7.6.1|8.4.1|8.6.1) ;;
+    7.6.1|8.4.1) ;;
     *) echo "Unknown Ren'Py target: $VERSION" >&2; exit 2 ;;
 esac
 # shellcheck source=/dev/null
