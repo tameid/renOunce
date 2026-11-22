@@ -2,7 +2,6 @@ name: Release Ren'Py engine
 on:
   push:
     branches:
-      - '7.6.1'
       - '8.4.1'
   workflow_dispatch:
 
@@ -20,7 +19,7 @@ jobs:
         run: |
           set -euo pipefail
           version="${GITHUB_REF_NAME}"
-          case "$version" in 7.6.1|8.4.1) ;; *) exit 1 ;; esac
+          case "$version" in 8.4.1) ;; *) exit 1 ;; esac
           source "targets/$version/target.env"
           test "$RENPY_VERSION" = "$version"
           if test "$STATUS" != buildable; then
@@ -29,17 +28,6 @@ jobs:
           fi
       - name: Install Switch 2 devkit
         run: curl -fsSL https://github.com/ouncebrew/ounce-devkit/releases/download/devkit-20261114/ounce-devkit-20261114.tar.xz | tar -xJ -C /opt/devkitpro
-      - name: Build Ren'Py 7.6.1
-        if: github.ref_name == '7.6.1'
-        shell: bash
-        run: |
-          set -euo pipefail
-          bash setup.bash
-          bash build.bash
-          bash build-switch2-runtime.bash
-          bash build-engine.bash 7.6.1
-          cd dist/7.6.1
-          sha256sum *.nro > renounce-renpy-7.6.1.nro.sha256
       - name: Build Ren'Py 8.4.1
         if: github.ref_name == '8.4.1'
         shell: bash
