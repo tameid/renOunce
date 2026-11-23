@@ -1,0 +1,20 @@
+--- a/Modules/_ctypes/_ctypes.c
++++ b/Modules/_ctypes/_ctypes.c
+@@ -122,3 +122,7 @@
+ #else
++#ifdef __SWITCH2__
++#include "horizon_dlfcn.h"
++#else
+ #include <dlfcn.h>
++#endif
+ #endif
+--- a/Modules/_ctypes/callproc.c
++++ b/Modules/_ctypes/callproc.c
+@@ -69,3 +69,7 @@
+ #else
++#ifdef __SWITCH2__
++#include "horizon_dlfcn.h"
++#else
+ #include <dlfcn.h>
++#endif
+ #endif

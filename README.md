@@ -1,6 +1,7 @@
 # renOunce
 
-Ren'Py 7.6.1 games on **Nintendo Switch 2** homebrew — a port of
+Ren'Py 7.6.1 and 8.4.1 game packaging for **Nintendo Switch 2** homebrew.
+The Ren'Py 7.6.1 runtime is a port of
 [Otorhin/Ren2Switch](https://github.com/Otorhin/Ren2Switch) (Ren'Py on
 Switch 1 / libnx) to [ouncebrew/ounce-devkit](https://github.com/ouncebrew/ounce-devkit)
 (libounce + OunceVK, Switch 2 / libnx-compatible), with minimal changes.
@@ -36,6 +37,23 @@ Switch 1 / libnx) to [ouncebrew/ounce-devkit](https://github.com/ouncebrew/ounce
   the game.
 
 ## Building
+
+### Aplicación gráfica para usuarios finales
+
+`packager_gui.py` abre una ventana para elegir Ren'Py 7.6.1 u 8.4.1, seleccionar un proyecto y
+generar su NRO sin instalar las herramientas de compilación de Switch 2.
+El distribuidor debe incluir un NRO base compilado con el soporte de
+`renounce-game-id`; la aplicación lo detecta automáticamente cuando va
+incluido. Las instrucciones de publicación están en
+`packager/README.md`. Para desarrollar localmente:
+
+```sh
+python3 -m pip install -r packager/requirements.txt
+python3 packager_gui.py
+```
+
+Cada versión usa su propio NRO base y `lib.zip`. El empaquetador conserva
+`pygame_sdl2` y las demás dependencias del motor seleccionado.
 
 The pipeline targets the same kind of container as Ren2Switch did
 (`devkitpro/devkita64:20221113` — Ubuntu-based, has apt + python2.7). CI
@@ -91,6 +109,30 @@ source-built runtime has launched The Question on Switch 2 hardware.
 Switch scaffolding) for anyone packaging other targets.
 
 ## Repository layout
+
+### Independent build targets
+
+Build the 7.6.1 or 8.4.1 engine inside the development container, then
+publish its untouched NRO as the desktop packager base:
+
+```sh
+make engine VERSION=8.4.1
+make editable-nro VERSION=8.4.1
+```
+
+Build a 7.6.1 game inside the container, or package an 8.4.1 game from its
+base NRO on the host:
+
+```sh
+make game VERSION=7.6.1 GAME_DIR=/path/to/project GAME_ID=MyGame
+make game VERSION=8.4.1 GAME_DIR=/path/to/project GAME_ID=MyGame
+```
+
+The engine, game and editable NRO targets write separate outputs. Engine
+staging starts fresh, while game packaging reads the base NRO without
+changing it. The 8.4.1 Python runtime links native `fcntl` and `_ctypes`
+with static libffi. Dynamic library loading through `ctypes.CDLL` reports
+that Horizon does not provide a POSIX dynamic loader.
 
 | Path | Role |
 |------|------|

@@ -1,0 +1,32 @@
+--- a/src/libhydrogen/impl/random.h
++++ b/src/libhydrogen/impl/random.h
+@@ -5,7 +5,9 @@
+     uint8_t  available;
+ } hydro_random_context;
+ 
+-#if defined(AVR) && !defined(__unix__)
++#if defined(__SWITCH2__)
++# include "random/switch2.h"
++#elif defined(AVR) && !defined(__unix__)
+ # include "random/avr.h"
+ #elif (defined(ESP32) || defined(ESP8266)) && !defined(__unix__)
+ # include "random/esp32.h"
+--- /dev/null
++++ b/src/libhydrogen/impl/random/switch2.h
+@@ -0,0 +1,16 @@
++/* Seed libhydrogen with the console's cryptographic RNG. */
++#include <switch.h>
++
++static int
++hydro_random_init(void)
++{
++    uint8_t seed[gimli_BLOCKBYTES + 8];
++    Result rc = csrngInitialize();
++    if (R_FAILED(rc)) return -1;
++    rc = csrngGetRandomBytes(seed, sizeof seed);
++    if (R_FAILED(rc)) return -1;
++    memcpy(hydro_random_context.state, seed, gimli_BLOCKBYTES);
++    memcpy(&hydro_random_context.counter, seed + gimli_BLOCKBYTES, 8);
++    hydro_memzero(seed, sizeof seed);
++    return 0;
++}

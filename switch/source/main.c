@@ -10,10 +10,8 @@
 #include <unistd.h>
 
 // Every game gets its own folder under sdmc:/renOunce/ for saves, logs,
-// cache and persistent data. The folder id is baked in at build time
-// (SWITCH_GAME_ID in switch/CMakeLists.txt) and handed to the Ren'Py
-// python layer through the RENOUNCE_HOME environment variable, which
-// renpy.patch reads everywhere Ren2Switch used to read the save: device.
+// cache and persistent data. Packaged games specify the folder id in
+// romfs:/Contents/renounce-game-id. Older builds use SWITCH_GAME_ID.
 #ifndef RENOUNCE_GAME_ID
 #define RENOUNCE_GAME_ID "game"
 #endif
@@ -26,6 +24,35 @@ static FILE* boot_log_file = NULL;
 static int nxlink_connected = 0;
 static char boot_home[512] = "sdmc:/renOunce/" RENOUNCE_GAME_ID;
 static char boot_log_path[600] = "sdmc:/renOunce-" RENOUNCE_GAME_ID "-boot.log";
+static char packaged_game_id[128] = RENOUNCE_GAME_ID;
+
+static void load_packaged_game_id(void)
+{
+    FILE* file = fopen("romfs:/Contents/renounce-game-id", "rb");
+    char candidate[sizeof(packaged_game_id)];
+    size_t n;
+    size_t i;
+
+    if (file == NULL)
+        return;
+    n = fread(candidate, 1, sizeof(candidate), file);
+    fclose(file);
+    if (n == 0 || n >= sizeof(candidate))
+        return;
+    if (candidate[n - 1] == '\n')
+        --n;
+    if (n == 0 || (n == 1 && candidate[0] == '.') ||
+        (n == 2 && candidate[0] == '.' && candidate[1] == '.'))
+        return;
+    for (i = 0; i < n; ++i) {
+        char c = candidate[i];
+        if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+              (c >= '0' && c <= '9') || c == '.' || c == '_' || c == '-'))
+            return;
+    }
+    candidate[n] = 0;
+    memcpy(packaged_game_id, candidate, n + 1);
+}
 
 static void boot_log(const char* fmt, ...)
 {
@@ -173,9 +200,12 @@ static Result userapp_socket_rc = 1;
 static void prepare_renounce_home(void)
 {
     char path[512];
-    const char* home = "sdmc:/renOunce/" RENOUNCE_GAME_ID;
+    const char* home;
     int rc_root, rc_home, rc_data, rc_logs, rc_cache;
 
+    snprintf(boot_home, sizeof(boot_home), "sdmc:/renOunce/%s", packaged_game_id);
+    snprintf(boot_log_path, sizeof(boot_log_path), "sdmc:/renOunce-%s-boot.log", packaged_game_id);
+    home = boot_home;
     rc_root = mkdir("sdmc:/renOunce", 0777);
     rc_home = mkdir(home, 0777);
 
@@ -208,7 +238,6 @@ static void prepare_renounce_home(void)
              rc_data, rc_logs, rc_cache, errno);
 
     setenv("RENOUNCE_HOME", home, 1);
-    strncpy(boot_home, home, sizeof(boot_home) - 1);
     boot_log("RENOUNCE_HOME=%s", home);
 }
 
@@ -216,8 +245,6 @@ void userAppInit()
 {
     Result rc_romfs, rc_socket;
     u64 mem_available = 0, mem_used = 0;
-
-    prepare_renounce_home();
 
     svcGetInfo(&mem_available, InfoType_TotalMemorySize, CUR_PROCESS_HANDLE, 0);
     svcGetInfo(&mem_used, InfoType_UsedMemorySize, CUR_PROCESS_HANDLE, 0);
@@ -227,6 +254,9 @@ void userAppInit()
 
     rc_romfs = romfsInit();
     userapp_romfs_rc = rc_romfs;
+    if (R_SUCCEEDED(rc_romfs))
+        load_packaged_game_id();
+    prepare_renounce_home();
     boot_log("romfsInit(): 0x%08x", rc_romfs);
 
     rc_socket = socketInitializeDefault();
@@ -541,7 +571,7 @@ int main(int argc, char* argv[])
     if (python_result == -1)
     {
         PyErr_Print();
-        show_error_and_exit("An uncaught Python exception occurred during renpy.py execution.\n\nPlease look in the sdmc:/renOunce/" RENOUNCE_GAME_ID "/Logs/ folder for more information about this exception.");
+        show_error_and_exit("An uncaught Python exception occurred during renpy.py execution.\n\nPlease look in the game's sdmc:/renOunce/<game-id>/Logs/ folder for more information about this exception.");
     }
 
     Py_Exit(0);

@@ -92,6 +92,10 @@ if [ -z "$GAME_ID" ]; then
     GAME_ID=$(printf '%s' "$NAME" | tr -c 'A-Za-z0-9._-' '_')
 fi
 [ -n "$GAME_ID" ] || GAME_ID="game"
+if [[ ! "$GAME_ID" =~ ^[A-Za-z0-9._-]+$ ]] || [ "$GAME_ID" = "." ] || [ "$GAME_ID" = ".." ]; then
+    echo "build-game.bash: ID must contain only ASCII letters, digits, dots, _ or - (not . or ..)" >&2
+    exit 1
+fi
 
 if [ -n "$ICON" ]; then
     ICON=$(realpath "$ICON")
@@ -110,6 +114,7 @@ rm -rf "$WORK"
 mkdir -p "$WORK/romfs/Contents/game"
 cp -r "$REPO/raw/switch/romfs/." "$WORK/romfs/"
 cp -r "$GAME_DIR/game/." "$WORK/romfs/Contents/game/"
+printf '%s\n' "$GAME_ID" > "$WORK/romfs/Contents/renounce-game-id"
 
 # Older engine templates did not embed the SDK fonts. The Question and other
 # Ren'Py examples reference SourceHanSansLite.ttf by its bare filename.
@@ -120,40 +125,7 @@ if [ ! -f "$WORK/romfs/Contents/renpy/common/SourceHanSansLite.ttf" ]; then
     fi
 fi
 
-# Older engine templates omit pygame_sdl2's pure-Python package. Its compiled
-# extensions are linked into the NRO, but Python still needs __init__.py and
-# the helpers in lib.zip to import the package.
-if ! unzip -Z1 "$WORK/romfs/Contents/lib.zip" | grep -qx 'python2.7/pygame_sdl2/__init__.py'; then
-    PYGAME_PY="$REPO/pygame_sdl2-source/src/pygame_sdl2"
-    if [ ! -f "$PYGAME_PY/__init__.py" ]; then
-        echo "build-game.bash: pygame_sdl2 Python sources missing; run setup.bash first" >&2
-        exit 1
-    fi
-    mkdir -p "$WORK/libzip/python2.7/pygame_sdl2/threads"
-    cp "$PYGAME_PY"/*.py "$WORK/libzip/python2.7/pygame_sdl2/"
-    cp "$PYGAME_PY"/threads/*.py "$WORK/libzip/python2.7/pygame_sdl2/threads/"
-    (cd "$WORK/libzip" && 7z a -tzip "$WORK/romfs/Contents/lib.zip" python2.7/pygame_sdl2) >/dev/null
-fi
-
-# Existing engine templates may lack SDK Python-only dependencies. Overlay all
-# platform-neutral packages rather than waiting for one import to fail at boot.
-SDK_PY="$REPO/raw/renpy_clear/lib/python2.7"
-if [ ! -f "$SDK_PY/builtins/__init__.pyo" ]; then
-    echo "build-game.bash: Ren'Py SDK Python dependencies missing; run build.bash first" >&2
-    exit 1
-fi
-mkdir -p "$WORK/libzip/python2.7"
-for package in builtins future past ecdsa requests certifi chardet idna urllib3 pyasn1 rsa copyreg html http ordlookup reprlib socketserver winreg; do
-    if [ -d "$SDK_PY/$package" ]; then
-        cp -r "$SDK_PY/$package" "$WORK/libzip/python2.7/"
-    fi
-done
-for module in six.pyo typing.pyo pefile.pyo list2cmdline.pyo; do
-    if [ -f "$SDK_PY/$module" ]; then
-        cp "$SDK_PY/$module" "$WORK/libzip/python2.7/"
-    fi
-done
-(cd "$WORK/libzip" && 7z a -tzip "$WORK/romfs/Contents/lib.zip" python2.7) >/dev/null
+bash "$REPO/prepare-libzip.bash" "$WORK/romfs/Contents/lib.zip" "$WORK/libzip"
 
 # The NRO embeds the romfs at link time, so reconfigure per game.
 source "$DEVKITPRO/switch2vars.sh"

@@ -65,7 +65,7 @@ if [ -d ./renpy-source/sdk-fonts ]; then
     cp -r ./renpy-source/sdk-fonts/. ./renpy_clear/renpy/common/
 fi
 cp ./renpy-source/renpy.py ./renpy_clear/renpy.py
-mv ./script.rpy ./renpy_clear/game/script.rpy
+cp ./script.rpy ./renpy_clear/game/script.rpy
 cp ./renpy_sdk/*/*.exe ./renpy_clear/
 # Keep renpy-source for build-switch2-runtime.bash, which cross-compiles its
 # Cython modules after the engine template is assembled.

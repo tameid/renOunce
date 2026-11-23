@@ -1,0 +1,40 @@
+--- a/Python/bootstrap_hash.c
++++ b/Python/bootstrap_hash.c
+@@ -2,6 +2,9 @@
+ #include "pycore_initconfig.h"
+ #include "pycore_fileutils.h"     // _Py_fstat_noraise()
+ #include "pycore_runtime.h"       // _PyRuntime
++#ifdef __SWITCH2__
++#  include <switch.h>
++#endif
+ 
+ #ifdef MS_WINDOWS
+ #  include <windows.h>
+@@ -490,6 +493,27 @@
+ 
+ #ifdef MS_WINDOWS
+     return win32_urandom((unsigned char *)buffer, size, raise);
++#elif defined(__SWITCH2__)
++    /* The console has no /dev/urandom. Use libounce's system CSRNG. */
++    static int csrng_ready = 0;
++    Result rc;
++    unsigned char *dest = buffer;
++    if (!csrng_ready) {
++        rc = csrngInitialize();
++        if (R_FAILED(rc)) goto csrng_error;
++        csrng_ready = 1;
++    }
++    while (size > 0) {
++        size_t chunk = size > 0x1000 ? 0x1000 : (size_t)size;
++        rc = csrngGetRandomBytes(dest, chunk);
++        if (R_FAILED(rc)) goto csrng_error;
++        dest += chunk;
++        size -= chunk;
++    }
++    return 0;
++csrng_error:
++    if (raise) PyErr_Format(PyExc_OSError, "Switch 2 CSRNG failed: 0x%08x", rc);
++    return -1;
+ #else
+ 
+ #if defined(PY_GETRANDOM) || defined(PY_GETENTROPY)
